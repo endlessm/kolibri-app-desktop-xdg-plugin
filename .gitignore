@@ -1,0 +1,6 @@
+__pycache__
+build/*
+dist/*
+kolibri_app_desktop_xdg_plugin.egg-info/*
+venv/
+Pipfile
