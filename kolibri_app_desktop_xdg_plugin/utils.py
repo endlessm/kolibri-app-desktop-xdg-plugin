@@ -124,9 +124,9 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
 
     @cached_property
     def __channel_icon(self):
-        if self.__channelmetadata.thumbnail:
+        try:
             return ChannelIcon(self.__channelmetadata.thumbnail)
-        else:
+        except ValueError:
             return None
 
     @property
@@ -228,13 +228,20 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
 
 
 class ChannelIcon(object):
+    MIMETYPES_MAP = {
+        'image/jpg' : 'image/jpeg'
+    }
+
     def __init__(self, thumbnail_data_uri):
         match = DATA_URI_PATTERN.match(thumbnail_data_uri)
         self.__thumbnail_info = match.groupdict()
+        if not self.file_extension or not self.thumbnail_data:
+            raise ValueError("Invalid data URI")
 
     @property
     def mimetype(self):
-        return self.__thumbnail_info.get("mimetype")
+        result = self.__thumbnail_info.get("mimetype")
+        return self.MIMETYPES_MAP.get(result, result)
 
     @cached_property
     def thumbnail_data(self):
@@ -242,7 +249,7 @@ class ChannelIcon(object):
 
     @cached_property
     def file_extension(self):
-        return mimetypes.guess_extension(self.mimetype)
+        return '.png'
 
     def write(self, icon_file):
         icon_size = (256, 256)
