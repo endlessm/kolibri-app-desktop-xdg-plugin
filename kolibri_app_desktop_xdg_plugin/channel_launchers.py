@@ -5,16 +5,22 @@ from __future__ import unicode_literals
 import base64
 import configparser
 import logging
-import mimetypes
 import os
 import re
 
 from kolibri.core.content.models import ChannelMetadata
-from kolibri.core.content.utils.paths import get_content_dir_path
 from kolibri.dist.django.utils.functional import cached_property
 from kolibri.dist.django.utils.six import BytesIO
 from PIL import Image
 from PIL import ImageFilter
+
+from .pillow_utils import paste_center
+from .pillow_utils import pil_formats_for_mimetype
+from .pillow_utils import resize_preserving_aspect_ratio
+from .path_utils import ensure_dir
+from .path_utils import get_content_share_dir_path
+from .path_utils import is_subdir
+from .path_utils import try_remove
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +72,11 @@ class ChannelLauncher(object):
 
     @property
     def applications_dir(self):
-        return os.path.join(_get_content_share_dir_path(), "applications")
+        return os.path.join(get_content_share_dir_path(), "applications")
 
     @property
     def icons_dir(self):
-        return os.path.join(_get_content_share_dir_path(), "icons")
+        return os.path.join(get_content_share_dir_path(), "icons")
 
     def compare(self, other):
         if not self.is_same_channel(other):
@@ -165,7 +171,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
 
         desktop_file_parser.set("Desktop Entry", "Icon", self.__icon_file_path or "")
 
-        _ensure_dir(self.desktop_file_path)
+        ensure_dir(self.desktop_file_path)
         with open(self.desktop_file_path, "w") as desktop_entry_file:
             desktop_file_parser.write(desktop_entry_file, space_around_delimiters=False)
 
@@ -173,7 +179,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         if not self.__channel_icon:
             return
 
-        _ensure_dir(self.__icon_file_path)
+        ensure_dir(self.__icon_file_path)
         with open(self.__icon_file_path, "wb") as icon_file:
             self.__channel_icon.write(icon_file)
 
@@ -185,7 +191,7 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
 
     @classmethod
     def load_all(cls):
-        applications_dir = os.path.join(_get_content_share_dir_path(), "applications")
+        applications_dir = os.path.join(get_content_share_dir_path(), "applications")
         if not os.path.isdir(applications_dir):
             return
         for file_name in os.listdir(applications_dir):
@@ -220,17 +226,15 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
 
     def delete_channel_icon(self):
         icon_path = self.__desktop_entry_data.get("Icon")
-        if os.path.isabs(icon_path) and _is_subdir(icon_path, self.icons_dir):
-            _try_remove(icon_path)
+        if os.path.isabs(icon_path) and is_subdir(icon_path, self.icons_dir):
+            try_remove(icon_path)
         else:
             # Icon is referred to by name, which we do not expect here.
             pass
 
 
 class ChannelIcon(object):
-    MIMETYPES_MAP = {
-        'image/jpg' : 'image/jpeg'
-    }
+    MIMETYPES_MAP = {"image/jpg": "image/jpeg"}
 
     def __init__(self, thumbnail_data_uri):
         match = DATA_URI_PATTERN.match(thumbnail_data_uri)
@@ -249,7 +253,7 @@ class ChannelIcon(object):
 
     @cached_property
     def file_extension(self):
-        return '.png'
+        return ".png"
 
     def write(self, icon_file):
         icon_size = (256, 256)
@@ -260,58 +264,14 @@ class ChannelIcon(object):
 
         thumbnail_io = BytesIO(self.thumbnail_data)
         thumbnail_image = Image.open(
-            thumbnail_io, formats=_pil_formats_for_mimetype(self.mimetype)
+            thumbnail_io, formats=pil_formats_for_mimetype(self.mimetype)
         )
         thumbnail_image.thumbnail(thumbnail_size, resample=Image.BICUBIC)
 
-        thumbnail_image = _resize_preserving_aspect_ratio(
+        thumbnail_image = resize_preserving_aspect_ratio(
             thumbnail_image, thumbnail_size, resample=Image.BICUBIC
         )
 
-        _paste_center(base_image, thumbnail_image)
+        paste_center(base_image, thumbnail_image)
 
         base_image.save(icon_file)
-
-
-def _get_content_share_dir_path():
-    """
-    Returns the path to the directory where XDG files, like .desktop launchers
-    and AppData, are located. By default, this is $KOLIBRI_HOME/content/xdg/share.
-    """
-    return os.path.join(get_content_dir_path(), "xdg", "share")
-
-
-def _ensure_dir(file_path):
-    dir_path = os.path.dirname(file_path)
-    if not os.path.isdir(dir_path):
-        os.makedirs(dir_path)
-    return file_path
-
-
-def _try_remove(file_path):
-    try:
-        os.remove(file_path)
-    except Exception:
-        pass
-
-
-def _is_subdir(subdir, basedir):
-    subdir = os.path.abspath(subdir)
-    basedir = os.path.abspath(basedir)
-    return subdir.startswith(basedir)
-
-
-def _pil_formats_for_mimetype(mimetype):
-    return [fmt for fmt, fmt_mime in Image.MIME.items() if fmt_mime == mimetype]
-
-
-def _paste_center(base_image, paste_image, **kwargs):
-    center = [int((a - b) / 2) for a, b in zip(base_image.size, paste_image.size)]
-    base_image.paste(paste_image, center, **kwargs)
-
-
-def _resize_preserving_aspect_ratio(source_image, target_size, **kwargs):
-    source_size_square = (max(source_image.size),) * 2
-    frame_image = Image.new("RGBA", source_size_square, (255, 255, 255, 0))
-    _paste_center(frame_image, source_image)
-    return frame_image.resize(target_size, **kwargs)

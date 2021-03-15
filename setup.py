@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
 
+import kolibri_app_desktop_xdg_plugin
 from setuptools import find_packages
 from setuptools import setup
-
-import kolibri_app_desktop_xdg_plugin
 
 with open(os.path.join(os.path.dirname(__file__), "README.md")) as readme:
     README_MD = readme.read()
@@ -26,10 +25,7 @@ setup(
     include_package_data=True,
     license="MIT",
     keywords="kolibri",
-    install_requires=[
-        'kolibri>=0.14.6',
-        'Pillow>=8.1.2'
-    ],
+    install_requires=["kolibri>=0.14.6", "Pillow>=8.1.2"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",

@@ -23,6 +23,6 @@ class AppDesktopXDGConfig(AppConfig):
         )
 
     def __on_content_cache_key_save(self, sender, instance=None, *args, **kwargs):
-        from .utils import update_channel_launchers
+        from .channel_launchers import update_channel_launchers
 
         update_channel_launchers()
