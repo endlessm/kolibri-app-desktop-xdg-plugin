@@ -12,8 +12,10 @@ from kolibri.core.content.models import ChannelMetadata
 from kolibri.dist.django.utils.functional import cached_property
 from kolibri.dist.django.utils.six import BytesIO
 from PIL import Image
+from PIL import ImageDraw
 from PIL import ImageFilter
 
+from .pillow_utils import draw_rounded_rectangle
 from .pillow_utils import paste_center
 from .pillow_utils import pil_formats_for_mimetype
 from .pillow_utils import resize_preserving_aspect_ratio
@@ -110,7 +112,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 1
+    FORMAT_VERSION = 2
 
     def __init__(self, channelmetadata):
         self.__channelmetadata = channelmetadata
@@ -257,10 +259,16 @@ class ChannelIcon(object):
 
     def write(self, icon_file):
         icon_size = (256, 256)
-        thumbnail_size = (256 - 16, 256 - 16)
-        shadow_size = (256 - 8, 256 - 8)
+        thumbnail_size = (256 - 48, 256 - 48)
 
         base_image = Image.new("RGBA", icon_size, (255, 255, 255, 0))
+
+        rectangle_draw = ImageDraw.Draw(base_image)
+        rectangle_draw.rectangle((8, 8, 256-8, 256-8), fill=(255, 255, 255, 255))
+
+        mask_image = Image.new("L", base_image.size, (0,))
+        mask_draw = ImageDraw.Draw(mask_image)
+        draw_rounded_rectangle(mask_draw, (8, 8, 256-8, 256-8), 16, fill=(255,))
 
         thumbnail_io = BytesIO(self.thumbnail_data)
         thumbnail_image = Image.open(
@@ -273,5 +281,7 @@ class ChannelIcon(object):
         )
 
         paste_center(base_image, thumbnail_image)
+
+        base_image.putalpha(mask_image)
 
         base_image.save(icon_file)
