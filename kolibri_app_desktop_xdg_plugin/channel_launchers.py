@@ -161,7 +161,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
             "Desktop Entry", "Comment", self.__channelmetadata.tagline or ""
         )
         desktop_file_parser.set(
-            "Desktop Entry", "Exec", 'gio open "kolibri:{}"'.format(self.channel_id)
+            "Desktop Entry", "Exec", 'gio open "kolibri:{}?standalone"'.format(self.channel_id)
         )
         desktop_file_parser.set("Desktop Entry", "X-Endless-LaunchMaximized", "True")
         desktop_file_parser.set(
