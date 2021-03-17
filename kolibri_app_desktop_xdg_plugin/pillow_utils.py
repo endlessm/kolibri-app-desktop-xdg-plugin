@@ -9,10 +9,16 @@ def pil_formats_for_mimetype(mimetype):
     return [fmt for fmt, fmt_mime in Image.MIME.items() if fmt_mime == mimetype]
 
 
+def center_xy(base_size, paste_size):
+    if len(base_size) > 2 or len(paste_size) > 2:
+        raise ValueError()
+    x1, y1 = [int((a - b) / 2) for a, b in zip(base_size, paste_size)]
+    return [x1, y1, x1 + paste_size[0], y1 + paste_size[1]]
+
+
 def paste_center(base_image, paste_image, **kwargs):
     tmp = base_image.copy()
-    center = [int((a - b) / 2) for a, b in zip(base_image.size, paste_image.size)]
-    tmp.paste(paste_image, center, **kwargs)
+    tmp.paste(paste_image, center_xy(base_image.size, paste_image.size), **kwargs)
     base_image.alpha_composite(tmp)
 
 

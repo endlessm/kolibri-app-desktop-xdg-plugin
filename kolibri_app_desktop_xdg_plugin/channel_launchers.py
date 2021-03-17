@@ -15,6 +15,7 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFilter
 
+from .pillow_utils import center_xy
 from .pillow_utils import draw_rounded_rectangle
 from .pillow_utils import paste_center
 from .pillow_utils import pil_formats_for_mimetype
@@ -259,16 +260,33 @@ class ChannelIcon(object):
 
     def write(self, icon_file):
         icon_size = (256, 256)
-        thumbnail_size = (256 - 48, 256 - 48)
+        shadow_size = (256 - 50, 256 - 50)
+        plate_size = (256 - 52, 256 - 52)
+        thumbnail_size = (256 - 80, 256 - 80)
+
+        plate_shadow_rgba = (200, 200, 200, 150)
+        plate_stroke_rgba = (200, 200, 200, 255)
+        plate_fill_rgba = (255, 255, 255, 255)
 
         base_image = Image.new("RGBA", icon_size, (255, 255, 255, 0))
 
-        rectangle_draw = ImageDraw.Draw(base_image)
-        rectangle_draw.rectangle((8, 8, 256-8, 256-8), fill=(255, 255, 255, 255))
-
-        mask_image = Image.new("L", base_image.size, (0,))
-        mask_draw = ImageDraw.Draw(mask_image)
-        draw_rounded_rectangle(mask_draw, (8, 8, 256-8, 256-8), 16, fill=(255,))
+        plate_image = Image.new("RGBA", base_image.size, (0,))
+        plate_draw = ImageDraw.Draw(plate_image)
+        draw_rounded_rectangle(
+            plate_draw,
+            center_xy(base_image.size, shadow_size),
+            14,
+            fill=plate_shadow_rgba,
+            width=1,
+        )
+        draw_rounded_rectangle(
+            plate_draw,
+            center_xy(base_image.size, plate_size),
+            14,
+            fill=plate_fill_rgba,
+            outline=plate_stroke_rgba,
+            width=1,
+        )
 
         thumbnail_io = BytesIO(self.thumbnail_data)
         thumbnail_image = Image.open(
@@ -280,8 +298,7 @@ class ChannelIcon(object):
             thumbnail_image, thumbnail_size, resample=Image.BICUBIC
         )
 
+        paste_center(base_image, plate_image)
         paste_center(base_image, thumbnail_image)
-
-        base_image.putalpha(mask_image)
 
         base_image.save(icon_file)
