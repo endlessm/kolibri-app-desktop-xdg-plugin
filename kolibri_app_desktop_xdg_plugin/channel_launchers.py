@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 DATA_URI_PATTERN = re.compile(
     "^(data:)(?P<mimetype>[\\w\\/\\+-]*)(;base64),(?P<data_b64>.*)"
 )
+
+LAUNCHER_CATEGORIES = ("Education", "X-Kolibri-Channel")
 LAUNCHER_PREFIX = "org.learningequality.Kolibri.Channel."
 
 
@@ -113,7 +115,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 2
+    FORMAT_VERSION = 3
 
     def __init__(self, channelmetadata):
         self.__channelmetadata = channelmetadata
@@ -170,7 +172,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         desktop_file_parser.set(
             "Desktop Entry", "X-Kolibri-Channel-Version", self.channel_version
         )
-        desktop_file_parser.set("Desktop Entry", "Categories", "Education;")
+        desktop_file_parser.set("Desktop Entry", "Categories", ";".join(LAUNCHER_CATEGORIES) + ";")
 
         desktop_file_parser.set("Desktop Entry", "Icon", self.__icon_file_path or "")
 
