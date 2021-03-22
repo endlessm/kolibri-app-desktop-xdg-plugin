@@ -25,5 +25,5 @@ XDG_DATA_DIRS="$HOME/.kolibri/content/xdg/share:${XDG_DATA_DIRS:-/usr/local/shar
 echo "XDG_DATA_DIRS=$XDG_DATA_DIRS"
 ```
 
-You can substitute the path to Kolibri's home directory for `${HOME}/.kolibri`.
+You can substitute the path to Kolibri's home directory for `$HOME/.kolibri`.
 
