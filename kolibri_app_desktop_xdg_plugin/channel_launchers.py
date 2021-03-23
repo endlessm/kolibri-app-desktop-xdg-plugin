@@ -243,9 +243,10 @@ class ChannelIcon(object):
 
     def __init__(self, thumbnail_data_uri):
         match = DATA_URI_PATTERN.match(thumbnail_data_uri)
-        self.__thumbnail_info = match.groupdict()
-        if not self.file_extension or not self.thumbnail_data:
+        if not match:
             raise ValueError("Invalid data URI")
+        self.__thumbnail_info = match.groupdict()
+            
 
     @property
     def mimetype(self):
