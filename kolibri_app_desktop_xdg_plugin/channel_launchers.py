@@ -15,15 +15,15 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFilter
 
+from .path_utils import ensure_dir
+from .path_utils import get_content_share_dir_path
+from .path_utils import is_subdir
+from .path_utils import try_remove
 from .pillow_utils import center_xy
 from .pillow_utils import draw_rounded_rectangle
 from .pillow_utils import paste_center
 from .pillow_utils import pil_formats_for_mimetype
 from .pillow_utils import resize_preserving_aspect_ratio
-from .path_utils import ensure_dir
-from .path_utils import get_content_share_dir_path
-from .path_utils import is_subdir
-from .path_utils import try_remove
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +94,26 @@ class ChannelLauncher(object):
         return self.channel_id == other.channel_id
 
     def save(self):
-        self.write_desktop_file()
-        self.write_channel_icon()
+        try:
+            icon_file_path = self.write_channel_icon()
+        except Exception as error:
+            logger.warning(
+                "Error writing icon file for channel %s: %s", self.channel_id, error
+            )
+            icon_file_path = None
+
+        try:
+            self.write_desktop_file(icon_file_path)
+        except Exception as error:
+            logger.warning(
+                "Error writing desktop file for channel %s: %s", self.channel_id, error
+            )
 
     def delete(self):
         self.delete_desktop_file()
         self.delete_channel_icon()
 
-    def write_desktop_file(self):
+    def write_desktop_file(self, icon_file_path):
         raise NotImplementedError()
 
     def delete_desktop_file(self):
@@ -115,7 +127,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 3
+    FORMAT_VERSION = 4
 
     def __init__(self, channelmetadata):
         self.__channelmetadata = channelmetadata
@@ -140,19 +152,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         except ValueError:
             return None
 
-    @property
-    def __icon_file_path(self):
-        if not self.__channel_icon:
-            return None
-
-        icon_file_name = "{prefix}{channel}{extension}".format(
-            prefix=LAUNCHER_PREFIX,
-            channel=self.channel_id,
-            extension=self.__channel_icon.file_extension,
-        )
-        return os.path.join(self.icons_dir, icon_file_name)
-
-    def write_desktop_file(self):
+    def write_desktop_file(self, icon_file_path):
         desktop_file_parser = configparser.ConfigParser()
         desktop_file_parser.optionxform = str
         desktop_file_parser.add_section("Desktop Entry")
@@ -163,7 +163,9 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
             "Desktop Entry", "Comment", self.__channelmetadata.tagline or ""
         )
         desktop_file_parser.set(
-            "Desktop Entry", "Exec", 'gio open "kolibri:{}?standalone"'.format(self.channel_id)
+            "Desktop Entry",
+            "Exec",
+            'gio open "kolibri:{}?standalone"'.format(self.channel_id),
         )
         desktop_file_parser.set("Desktop Entry", "X-Endless-LaunchMaximized", "True")
         desktop_file_parser.set(
@@ -172,9 +174,12 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         desktop_file_parser.set(
             "Desktop Entry", "X-Kolibri-Channel-Version", self.channel_version
         )
-        desktop_file_parser.set("Desktop Entry", "Categories", ";".join(LAUNCHER_CATEGORIES) + ";")
+        desktop_file_parser.set(
+            "Desktop Entry", "Categories", ";".join(LAUNCHER_CATEGORIES) + ";"
+        )
 
-        desktop_file_parser.set("Desktop Entry", "Icon", self.__icon_file_path or "")
+        if icon_file_path:
+            desktop_file_parser.set("Desktop Entry", "Icon", icon_file_path)
 
         ensure_dir(self.desktop_file_path)
         with open(self.desktop_file_path, "w") as desktop_entry_file:
@@ -184,9 +189,18 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         if not self.__channel_icon:
             return
 
-        ensure_dir(self.__icon_file_path)
-        with open(self.__icon_file_path, "wb") as icon_file:
+        icon_file_name = "{prefix}{channel}{extension}".format(
+            prefix=LAUNCHER_PREFIX,
+            channel=self.channel_id,
+            extension=self.__channel_icon.file_extension,
+        )
+        icon_file_path = os.path.join(self.icons_dir, icon_file_name)
+        ensure_dir(icon_file_path)
+
+        with open(icon_file_path, "wb") as icon_file:
             self.__channel_icon.write(icon_file)
+
+        return icon_file_path
 
 
 class ChannelLauncher_FromDisk(ChannelLauncher):
@@ -246,7 +260,6 @@ class ChannelIcon(object):
         if not match:
             raise ValueError("Invalid data URI")
         self.__thumbnail_info = match.groupdict()
-            
 
     @property
     def mimetype(self):
