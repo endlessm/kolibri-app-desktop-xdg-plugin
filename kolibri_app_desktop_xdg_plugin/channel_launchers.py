@@ -13,7 +13,6 @@ from kolibri.dist.django.utils.functional import cached_property
 from kolibri.dist.django.utils.six import BytesIO
 from PIL import Image
 from PIL import ImageDraw
-from PIL import ImageFilter
 
 from .path_utils import ensure_dir
 from .path_utils import get_content_share_dir_path
@@ -22,7 +21,6 @@ from .path_utils import try_remove
 from .pillow_utils import center_xy
 from .pillow_utils import draw_rounded_rectangle
 from .pillow_utils import paste_center
-from .pillow_utils import pil_formats_for_mimetype
 from .pillow_utils import resize_preserving_aspect_ratio
 
 logger = logging.getLogger(__name__)
@@ -305,9 +303,9 @@ class ChannelIcon(object):
         )
 
         thumbnail_io = BytesIO(self.thumbnail_data)
-        thumbnail_image = Image.open(
-            thumbnail_io, formats=pil_formats_for_mimetype(self.mimetype)
-        )
+
+        thumbnail_image = Image.open(thumbnail_io)
+
         thumbnail_image.thumbnail(thumbnail_size, resample=Image.BICUBIC)
 
         thumbnail_image = resize_preserving_aspect_ratio(
