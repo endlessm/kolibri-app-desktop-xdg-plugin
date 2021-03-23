@@ -132,7 +132,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
 
     @classmethod
     def load_all(cls):
-        for channelmetadata in ChannelMetadata.objects.all():
+        for channelmetadata in ChannelMetadata.objects.filter(root__available=True):
             yield cls(channelmetadata)
 
     @property
