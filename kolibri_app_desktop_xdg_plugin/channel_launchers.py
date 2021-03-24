@@ -93,15 +93,15 @@ class ChannelLauncher(object):
 
     def save(self):
         try:
-            icon_file_path = self.write_channel_icon()
+            icon_name = self.write_channel_icon()
         except Exception as error:
             logger.warning(
                 "Error writing icon file for channel %s: %s", self.channel_id, error
             )
-            icon_file_path = None
+            icon_name = None
 
         try:
-            self.write_desktop_file(icon_file_path)
+            self.write_desktop_file(icon_name)
         except Exception as error:
             logger.warning(
                 "Error writing desktop file for channel %s: %s", self.channel_id, error
@@ -111,7 +111,7 @@ class ChannelLauncher(object):
         self.delete_desktop_file()
         self.delete_channel_icon()
 
-    def write_desktop_file(self, icon_file_path):
+    def write_desktop_file(self, icon_name):
         raise NotImplementedError()
 
     def delete_desktop_file(self):
@@ -125,7 +125,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 4
+    FORMAT_VERSION = 5
 
     def __init__(self, channelmetadata):
         self.__channelmetadata = channelmetadata
@@ -150,7 +150,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         except ValueError:
             return None
 
-    def write_desktop_file(self, icon_file_path):
+    def write_desktop_file(self, icon_name):
         desktop_file_parser = configparser.ConfigParser()
         desktop_file_parser.optionxform = str
         desktop_file_parser.add_section("Desktop Entry")
@@ -176,8 +176,8 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
             "Desktop Entry", "Categories", ";".join(LAUNCHER_CATEGORIES) + ";"
         )
 
-        if icon_file_path:
-            desktop_file_parser.set("Desktop Entry", "Icon", icon_file_path)
+        if icon_name:
+            desktop_file_parser.set("Desktop Entry", "Icon", icon_name)
 
         ensure_dir(self.desktop_file_path)
         with open(self.desktop_file_path, "w") as desktop_entry_file:
@@ -187,18 +187,17 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         if not self.__channel_icon:
             return
 
-        icon_file_name = "{prefix}{channel}{extension}".format(
-            prefix=LAUNCHER_PREFIX,
-            channel=self.channel_id,
-            extension=self.__channel_icon.file_extension,
+        icon_name = "{prefix}{channel}".format(
+            prefix=LAUNCHER_PREFIX, channel=self.channel_id
         )
-        icon_file_path = os.path.join(self.icons_dir, icon_file_name)
-        ensure_dir(icon_file_path)
+        icon_file_name = icon_name + self.__channel_icon.file_extension
+        icon_file_path = os.path.join(self.icons_dir, "hicolor", "256x256", "apps", icon_file_name)
 
+        ensure_dir(icon_file_path)
         with open(icon_file_path, "wb") as icon_file:
             self.__channel_icon.write(icon_file)
 
-        return icon_file_path
+        return icon_name
 
 
 class ChannelLauncher_FromDisk(ChannelLauncher):
@@ -242,12 +241,16 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
         pass
 
     def delete_channel_icon(self):
-        icon_path = self.__desktop_entry_data.get("Icon")
-        if os.path.isabs(icon_path) and is_subdir(icon_path, self.icons_dir):
-            try_remove(icon_path)
-        else:
-            # Icon is referred to by name, which we do not expect here.
-            pass
+        # We can crudely guess the channel's icon file path
+
+        icon_name = "{prefix}{channel}".format(
+            prefix=LAUNCHER_PREFIX, channel=self.channel_id
+        )
+        icon_file_name = icon_name + ".png"
+        icon_file_path = os.path.join(self.icons_dir, "hicolor", "256x256", "apps", icon_file_name)
+
+        if os.path.isfile(icon_file_path):
+            try_remove(icon_file_path)
 
 
 class ChannelIcon(object):
