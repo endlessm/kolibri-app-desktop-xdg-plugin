@@ -60,20 +60,19 @@ def update_channel_launchers(force=False):
             did_icons_change = True
 
     if did_icons_change:
+        update_icon_cache_params = [context.icon_theme_dir]
+
         try:
             system_theme_index = "/usr/share/icons/hicolor/index.theme"
             theme_index = os.path.join(context.icon_theme_dir, "index.theme")
             shutil.copyfile(system_theme_index, theme_index)
         except OSError:
-            subprocess.run(["gtk-update-icon-cache", context.icon_theme_dir])
-        else:
-            subprocess.run(
-                [
-                    "gtk-update-icon-cache",
-                    "--ignore-theme-index",
-                    context.icon_theme_dir,
-                ]
-            )
+            update_icon_cache_params += ["--ignore-theme-index"]
+
+        try:
+            subprocess.run(["gtk-update-icon-cache", *update_icon_cache_params])
+        except OSError as error:
+            logger.info("Error running gtk-update-icon-cache: %s", error)
 
 
 class ChannelLaunchersContext(object):
