@@ -38,8 +38,9 @@ LAUNCHER_PREFIX = "org.learningequality.Kolibri.Channel."
 def update_channel_launchers(force=False):
     context = ChannelLaunchersContext()
 
-    launchers_from_db = list(ChannelLauncher_FromDatabase.load_all(context=context))
-    launchers_from_disk = list(ChannelLauncher_FromDisk.load_all(context=context))
+    launchers_from_db = list(ChannelLauncher_FromDatabase.load_all(context))
+    launchers_from_disk = list(ChannelLauncher_FromDisk.load_all(context))
+
     did_icons_change = False
 
     for launcher in launchers_from_disk:
