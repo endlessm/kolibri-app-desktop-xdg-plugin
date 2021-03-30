@@ -7,6 +7,8 @@ import configparser
 import logging
 import os
 import re
+import shutil
+import subprocess
 
 from kolibri.core.content.models import ChannelMetadata
 from kolibri.dist.django.utils.functional import cached_property
@@ -34,24 +36,59 @@ LAUNCHER_PREFIX = "org.learningequality.Kolibri.Channel."
 
 
 def update_channel_launchers(force=False):
-    launchers_from_db = list(ChannelLauncher_FromDatabase.load_all())
-    launchers_from_disk = list(ChannelLauncher_FromDisk.load_all())
+    context = ChannelLaunchersContext()
+
+    launchers_from_db = list(ChannelLauncher_FromDatabase.load_all(context=context))
+    launchers_from_disk = list(ChannelLauncher_FromDisk.load_all(context=context))
+    did_icons_change = False
 
     for launcher in launchers_from_disk:
         if not any(map(launcher.is_same_channel, launchers_from_db)):
             logger.info("Removing desktop launcher %s", launcher)
             launcher.delete()
+            did_icons_change = True
 
     for launcher in launchers_from_db:
         if not any(map(launcher.is_same_channel, launchers_from_disk)):
             logger.info("Creating desktop launcher %s", launcher)
             launcher.save()
+            did_icons_change = True
         elif force or any(map(launcher.compare, launchers_from_disk)):
             logger.info("Updating desktop launcher %s", launcher)
             launcher.save()
+            did_icons_change = True
+
+    if did_icons_change:
+        try:
+            system_theme_index = "/usr/share/icons/hicolor/index.theme"
+            theme_index = os.path.join(context.icon_theme_dir, "index.theme")
+            shutil.copyfile(system_theme_index, theme_index)
+        except OSError:
+            subprocess.run(["gtk-update-icon-cache", context.icon_theme_dir])
+        else:
+            subprocess.run(
+                [
+                    "gtk-update-icon-cache",
+                    "--ignore-theme-index",
+                    context.icon_theme_dir,
+                ]
+            )
+
+
+class ChannelLaunchersContext(object):
+    @property
+    def applications_dir(self):
+        return os.path.join(get_content_share_dir_path(), "applications")
+
+    @property
+    def icon_theme_dir(self):
+        return os.path.join(get_content_share_dir_path(), "icons", "hicolor")
 
 
 class ChannelLauncher(object):
+    def __init__(self, context):
+        self.__context = context
+
     def __str__(self):
         return self.desktop_file_name
 
@@ -65,7 +102,7 @@ class ChannelLauncher(object):
 
     @property
     def desktop_file_path(self):
-        return os.path.join(self.applications_dir, self.desktop_file_name)
+        return os.path.join(self.__context.applications_dir, self.desktop_file_name)
 
     @property
     def desktop_file_name(self):
@@ -73,13 +110,8 @@ class ChannelLauncher(object):
             prefix=LAUNCHER_PREFIX, channel=self.channel_id
         )
 
-    @property
-    def applications_dir(self):
-        return os.path.join(get_content_share_dir_path(), "applications")
-
-    @property
-    def icons_dir(self):
-        return os.path.join(get_content_share_dir_path(), "icons")
+    def get_icon_file_path(self, file_name, size="256x256"):
+        return os.path.join(self.__context.icon_theme_dir, size, "apps", file_name)
 
     def compare(self, other):
         if not self.is_same_channel(other):
@@ -127,13 +159,14 @@ class ChannelLauncher(object):
 class ChannelLauncher_FromDatabase(ChannelLauncher):
     FORMAT_VERSION = 5
 
-    def __init__(self, channelmetadata):
+    def __init__(self, context, channelmetadata):
+        super().__init__(context)
         self.__channelmetadata = channelmetadata
 
     @classmethod
-    def load_all(cls):
+    def load_all(cls, context):
         for channelmetadata in ChannelMetadata.objects.filter(root__available=True):
-            yield cls(channelmetadata)
+            yield cls(context, channelmetadata)
 
     @property
     def channel_id(self):
@@ -190,8 +223,9 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         icon_name = "{prefix}{channel}".format(
             prefix=LAUNCHER_PREFIX, channel=self.channel_id
         )
-        icon_file_name = icon_name + self.__channel_icon.file_extension
-        icon_file_path = os.path.join(self.icons_dir, "hicolor", "256x256", "apps", icon_file_name)
+        icon_file_path = self.get_icon_file_path(
+            icon_name + self.__channel_icon.file_extension
+        )
 
         ensure_dir(icon_file_path)
         with open(icon_file_path, "wb") as icon_file:
@@ -201,12 +235,13 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
 
 
 class ChannelLauncher_FromDisk(ChannelLauncher):
-    def __init__(self, desktop_file_path, desktop_entry_data):
+    def __init__(self, context, desktop_file_path, desktop_entry_data):
+        super().__init__(context)
         self.__desktop_file_path = desktop_file_path
         self.__desktop_entry_data = desktop_entry_data
 
     @classmethod
-    def load_all(cls):
+    def load_all(cls, context):
         applications_dir = os.path.join(get_content_share_dir_path(), "applications")
         if not os.path.isdir(applications_dir):
             return
@@ -219,7 +254,7 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
                 desktop_entry_data = dict(
                     desktop_file_parser.items(section="Desktop Entry")
                 )
-                yield cls(file_path, desktop_entry_data)
+                yield cls(context, file_path, desktop_entry_data)
 
     @property
     def channel_id(self):
@@ -246,8 +281,7 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
         icon_name = "{prefix}{channel}".format(
             prefix=LAUNCHER_PREFIX, channel=self.channel_id
         )
-        icon_file_name = icon_name + ".png"
-        icon_file_path = os.path.join(self.icons_dir, "hicolor", "256x256", "apps", icon_file_name)
+        icon_file_path = self.get_icon_file_path(icon_name + ".png")
 
         if os.path.isfile(icon_file_path):
             try_remove(icon_file_path)
