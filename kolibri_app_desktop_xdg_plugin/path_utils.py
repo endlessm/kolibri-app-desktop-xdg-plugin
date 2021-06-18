@@ -27,9 +27,3 @@ def try_remove(file_path):
         os.remove(file_path)
     except Exception:
         pass
-
-
-def is_subdir(subdir, basedir):
-    subdir = os.path.abspath(subdir)
-    basedir = os.path.abspath(basedir)
-    return subdir.startswith(basedir)
