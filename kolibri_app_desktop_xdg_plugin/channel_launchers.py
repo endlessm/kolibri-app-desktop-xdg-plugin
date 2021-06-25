@@ -18,10 +18,10 @@ from PIL import ImageDraw
 
 from .path_utils import ensure_dir
 from .path_utils import get_content_share_dir_path
-from .path_utils import is_subdir
 from .path_utils import try_remove
 from .pillow_utils import center_xy
-from .pillow_utils import draw_rounded_rectangle
+from .pillow_utils import crop_image_to_square
+from .pillow_utils import image_is_square
 from .pillow_utils import paste_center
 from .pillow_utils import resize_preserving_aspect_ratio
 
@@ -290,6 +290,9 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
 class ChannelIcon(object):
     MIMETYPES_MAP = {"image/jpg": "image/jpeg"}
 
+    icon_size = (256, 256)
+    icon_inner_size = (256 - 48, 256 - 48)
+
     def __init__(self, thumbnail_data_uri):
         match = DATA_URI_PATTERN.match(thumbnail_data_uri)
         if not match:
@@ -309,47 +312,90 @@ class ChannelIcon(object):
     def file_extension(self):
         return ".png"
 
+    @cached_property
+    def thumbnail_image(self):
+        thumbnail_io = BytesIO(self.thumbnail_data)
+        return Image.open(thumbnail_io)
+
+    @cached_property
+    def icon_image(self):
+        return self.__apply_icon_mask(self.__icon_inner_default_image)
+
     def write(self, icon_file):
-        icon_size = (256, 256)
-        shadow_size = (256 - 50, 256 - 50)
-        plate_size = (256 - 52, 256 - 52)
+        self.icon_image.save(icon_file)
+
+    @cached_property
+    def __icon_source_image(self):
+        # The icon source image is the thumbnail, cropped to remove its own
+        # padding, and cropped again to square if the icon is close to square
+        # already.
+
+        bbox = self.thumbnail_image.getbbox()
+        image_cropped = self.thumbnail_image.crop(bbox)
+        return crop_image_to_square(image_cropped, cut_area=0.04)
+
+    @cached_property
+    def __icon_inner_fill_image(self):
+        # The "fill" icon variant resizes the source image to icon_inner_size.
+        # The corners will be rounded, later, by __apply_icon_mask.
+
+        base_image = Image.new("RGBA", self.icon_inner_size, (0, 0, 0, 0))
+        thumbnail_image = resize_preserving_aspect_ratio(
+            self.__icon_source_image, self.icon_inner_size, resample=Image.BICUBIC
+        )
+        paste_center(base_image, thumbnail_image)
+        return base_image
+
+    @cached_property
+    def __icon_inner_tile_image(self):
+        # The "tile" icon variant resizes the source image to a smaller space
+        # inside icon_inner_size. The remaining space is filled with a white
+        # background.
+
         thumbnail_size = (256 - 80, 256 - 80)
 
-        plate_shadow_rgba = (200, 200, 200, 150)
-        plate_stroke_rgba = (200, 200, 200, 255)
-        plate_fill_rgba = (255, 255, 255, 255)
-
-        base_image = Image.new("RGBA", icon_size, (255, 255, 255, 0))
-
-        plate_image = Image.new("RGBA", base_image.size, (0,))
-        plate_draw = ImageDraw.Draw(plate_image)
-        draw_rounded_rectangle(
-            plate_draw,
-            center_xy(base_image.size, shadow_size),
-            14,
-            fill=plate_shadow_rgba,
-            width=1,
-        )
-        draw_rounded_rectangle(
-            plate_draw,
-            center_xy(base_image.size, plate_size),
-            14,
-            fill=plate_fill_rgba,
-            outline=plate_stroke_rgba,
-            width=1,
-        )
-
-        thumbnail_io = BytesIO(self.thumbnail_data)
-
-        thumbnail_image = Image.open(thumbnail_io)
-
-        thumbnail_image.thumbnail(thumbnail_size, resample=Image.BICUBIC)
-
+        base_image = Image.new("RGBA", self.icon_inner_size, (255, 255, 255, 255))
         thumbnail_image = resize_preserving_aspect_ratio(
-            thumbnail_image, thumbnail_size, resample=Image.BICUBIC
+            self.__icon_source_image, thumbnail_size, resample=Image.BICUBIC
+        )
+        paste_center(base_image, thumbnail_image)
+        return base_image
+
+    @cached_property
+    def __icon_inner_default_image(self):
+        # The default icon variant is the "fill" variant if it is exactly
+        # square with no transparent pixels. Otherwise, it is the "tile"
+        # variant.
+
+        if image_is_square(self.__icon_inner_fill_image):
+            return self.__icon_inner_fill_image
+        else:
+            return self.__icon_inner_tile_image
+
+    def __apply_icon_mask(self, icon_image):
+        # The icon mask is a rounded rectangle matching the GNOME icon set.
+
+        shadow_size = (256 - 50, 256 - 50)
+        plate_size = (256 - 52, 256 - 52)
+
+        base_mask = Image.new("L", self.icon_size, (0,))
+        base_mask_draw = ImageDraw.Draw(base_mask)
+        base_mask_draw.rounded_rectangle(
+            center_xy(base_mask.size, shadow_size),
+            14,
+            fill=(200,),
+            width=1,
+        )
+        base_mask_draw.rounded_rectangle(
+            center_xy(base_mask.size, plate_size),
+            14,
+            fill=(255,),
+            outline=(255,),
+            width=1,
         )
 
-        paste_center(base_image, plate_image)
-        paste_center(base_image, thumbnail_image)
+        base_image = Image.new("RGBA", self.icon_size, (0, 0, 0, 0))
+        paste_center(base_image, icon_image)
+        base_image.putalpha(base_mask)
 
-        base_image.save(icon_file)
+        return base_image

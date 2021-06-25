@@ -25,7 +25,7 @@ setup(
     include_package_data=True,
     license="MIT",
     keywords="kolibri",
-    install_requires=["kolibri>=0.14.6", "Pillow>=8.1.2"],
+    install_requires=["kolibri>=0.14.6", "Pillow>=8.2.0"],
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",
