@@ -32,7 +32,10 @@ DATA_URI_PATTERN = re.compile(
 )
 
 LAUNCHER_CATEGORIES = ("Education", "X-Kolibri-Channel")
-LAUNCHER_PREFIX = "org.learningequality.Kolibri.Channel."
+
+KOLIBRI_APP_ID = os.environ.get("FLATPAK_ID", "org.learningequality.Kolibri")
+
+CHANNEL_DESKTOP_ID_FORMAT = KOLIBRI_APP_ID + ".channel_{}"
 
 
 def update_channel_launchers(force=False):
@@ -97,6 +100,10 @@ class ChannelLauncher(object):
         raise NotImplementedError()
 
     @property
+    def desktop_id(self):
+        return CHANNEL_DESKTOP_ID_FORMAT.format(self.channel_id)
+
+    @property
     def channel_version(self):
         raise NotImplementedError()
 
@@ -106,8 +113,7 @@ class ChannelLauncher(object):
 
     @property
     def desktop_file_name(self):
-        return "{prefix}{channel}.desktop".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
+        return "{}.desktop".format(self.desktop_id)
         )
 
     def get_icon_file_path(self, file_name, size="256x256"):
@@ -220,9 +226,7 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         if not self.__channel_icon:
             return
 
-        icon_name = "{prefix}{channel}".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
-        )
+        icon_name = self.desktop_id
         icon_file_path = self.get_icon_file_path(
             icon_name + self.__channel_icon.file_extension
         )
@@ -276,15 +280,16 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
         pass
 
     def delete_channel_icon(self):
-        # We can crudely guess the channel's icon file path
+        icon_name = self.__desktop_entry_data.get("Icon")
 
-        icon_name = "{prefix}{channel}".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
-        )
+        if not icon_name:
+            return
+
+        # We assume the channel's icon file is a png
         icon_file_path = self.get_icon_file_path(icon_name + ".png")
 
-        if os.path.isfile(icon_file_path):
-            try_remove(icon_file_path)
+        if icon_file_path and os.path.isfile(icon_file_path):
+            try_remove(self.icon_file_path)
 
 
 class ChannelIcon(object):
