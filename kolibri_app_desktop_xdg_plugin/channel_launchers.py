@@ -32,7 +32,15 @@ DATA_URI_PATTERN = re.compile(
 )
 
 LAUNCHER_CATEGORIES = ("Education", "X-Kolibri-Channel")
-LAUNCHER_PREFIX = "org.learningequality.Kolibri.Channel."
+
+KOLIBRI_APP_ID = os.environ.get("FLATPAK_ID", "org.learningequality.Kolibri")
+KOLIBRI_SEARCH_PROVIDER_BUS_NAME = KOLIBRI_APP_ID + ".SearchProvider"
+KOLIBRI_SEARCH_PROVIDER_OBJECT_PATH = "/" + KOLIBRI_SEARCH_PROVIDER_BUS_NAME.replace(".", "/")
+
+CHANNEL_DESKTOP_ID_FORMAT = KOLIBRI_APP_ID + ".channel_{}"
+CHANNEL_SEARCH_PROVIDER_OBJECT_PATH_FORMAT = (
+    KOLIBRI_SEARCH_PROVIDER_OBJECT_PATH + "/channel_{}"
+)
 
 
 def update_channel_launchers(force=False):
@@ -81,6 +89,12 @@ class ChannelLaunchersContext(object):
         return os.path.join(get_content_share_dir_path(), "applications")
 
     @property
+    def search_providers_dir(self):
+        return os.path.join(
+            get_content_share_dir_path(), "gnome-shell", "search-providers"
+        )
+
+    @property
     def icon_theme_dir(self):
         return os.path.join(get_content_share_dir_path(), "icons", "hicolor")
 
@@ -97,6 +111,10 @@ class ChannelLauncher(object):
         raise NotImplementedError()
 
     @property
+    def desktop_id(self):
+        return CHANNEL_DESKTOP_ID_FORMAT.format(self.channel_id)
+
+    @property
     def channel_version(self):
         raise NotImplementedError()
 
@@ -106,9 +124,17 @@ class ChannelLauncher(object):
 
     @property
     def desktop_file_name(self):
-        return "{prefix}{channel}.desktop".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
+        return "{}.desktop".format(self.desktop_id)
+
+    @property
+    def search_provider_file_path(self):
+        return os.path.join(
+            self.__context.search_providers_dir, self.search_provider_file_name
         )
+
+    @property
+    def search_provider_file_name(self):
+        return "{}.ini".format(self.desktop_id)
 
     def get_icon_file_path(self, file_name, size="256x256"):
         return os.path.join(self.__context.icon_theme_dir, size, "apps", file_name)
@@ -121,7 +147,10 @@ class ChannelLauncher(object):
         return (self_channel - other_channel) or (self_format - other_format)
 
     def is_same_channel(self, other):
-        return self.channel_id == other.channel_id
+        return (
+            self.desktop_file_path == other.desktop_file_path
+            and self.channel_id == other.channel_id
+        )
 
     def save(self):
         try:
@@ -139,8 +168,18 @@ class ChannelLauncher(object):
                 "Error writing desktop file for channel %s: %s", self.channel_id, error
             )
 
+        try:
+            self.write_search_provider()
+        except Exception as error:
+            logger.warning(
+                "Error writing search provider for channel %s: %s",
+                self.channel_id,
+                error,
+            )
+
     def delete(self):
         self.delete_desktop_file()
+        self.delete_search_provider()
         self.delete_channel_icon()
 
     def write_desktop_file(self, icon_name):
@@ -148,6 +187,12 @@ class ChannelLauncher(object):
 
     def delete_desktop_file(self):
         os.remove(self.desktop_file_path)
+
+    def write_search_provider(self):
+        raise NotImplementedError()
+
+    def delete_search_provider(self):
+        os.remove(self.search_provider_file_path)
 
     def write_channel_icon(self):
         raise NotImplementedError()
@@ -157,7 +202,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 5
+    FORMAT_VERSION = 6
 
     def __init__(self, context, channelmetadata):
         super().__init__(context)
@@ -196,7 +241,9 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         desktop_file_parser.set(
             "Desktop Entry",
             "Exec",
-            f"gio open kolibri-channel:{self.channel_id}",
+            "gio open x-kolibri-dispatch://{channel_id}".format(
+                channel_id=self.channel_id
+            ),
         )
         desktop_file_parser.set("Desktop Entry", "X-Endless-LaunchMaximized", "True")
         desktop_file_parser.set(
@@ -216,13 +263,34 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         with open(self.desktop_file_path, "w") as desktop_entry_file:
             desktop_file_parser.write(desktop_entry_file, space_around_delimiters=False)
 
+    def write_search_provider(self):
+        search_provider_file_parser = configparser.ConfigParser()
+        search_provider_file_parser.optionxform = str
+        search_provider_file_parser.add_section("Shell Search Provider")
+        search_provider_file_parser.set(
+            "Shell Search Provider", "DesktopId", self.desktop_file_name
+        )
+        search_provider_file_parser.set(
+            "Shell Search Provider", "BusName", KOLIBRI_SEARCH_PROVIDER_BUS_NAME
+        )
+        search_provider_file_parser.set(
+            "Shell Search Provider",
+            "ObjectPath",
+            CHANNEL_SEARCH_PROVIDER_OBJECT_PATH_FORMAT.format(self.channel_id),
+        )
+        search_provider_file_parser.set("Shell Search Provider", "Version", "2")
+
+        ensure_dir(self.search_provider_file_path)
+        with open(self.search_provider_file_path, "w") as search_provider_file:
+            search_provider_file_parser.write(
+                search_provider_file, space_around_delimiters=False
+            )
+
     def write_channel_icon(self):
         if not self.__channel_icon:
             return
 
-        icon_name = "{prefix}{channel}".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
-        )
+        icon_name = self.desktop_id
         icon_file_path = self.get_icon_file_path(
             icon_name + self.__channel_icon.file_extension
         )
@@ -276,14 +344,15 @@ class ChannelLauncher_FromDisk(ChannelLauncher):
         pass
 
     def delete_channel_icon(self):
-        # We can crudely guess the channel's icon file path
+        icon_name = self.__desktop_entry_data.get("Icon")
 
-        icon_name = "{prefix}{channel}".format(
-            prefix=LAUNCHER_PREFIX, channel=self.channel_id
-        )
+        if not icon_name:
+            return
+
+        # We assume the channel's icon file is a png
         icon_file_path = self.get_icon_file_path(icon_name + ".png")
 
-        if os.path.isfile(icon_file_path):
+        if icon_file_path and os.path.isfile(icon_file_path):
             try_remove(icon_file_path)
 
 
