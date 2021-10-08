@@ -35,7 +35,9 @@ LAUNCHER_CATEGORIES = ("Education", "X-Kolibri-Channel")
 
 KOLIBRI_APP_ID = os.environ.get("FLATPAK_ID", "org.learningequality.Kolibri")
 KOLIBRI_SEARCH_PROVIDER_BUS_NAME = KOLIBRI_APP_ID + ".SearchProvider"
-KOLIBRI_SEARCH_PROVIDER_OBJECT_PATH = "/" + KOLIBRI_SEARCH_PROVIDER_BUS_NAME.replace(".", "/")
+KOLIBRI_SEARCH_PROVIDER_OBJECT_PATH = "/" + KOLIBRI_SEARCH_PROVIDER_BUS_NAME.replace(
+    ".", "/"
+)
 
 CHANNEL_DESKTOP_ID_FORMAT = KOLIBRI_APP_ID + ".channel_{}"
 CHANNEL_SEARCH_PROVIDER_OBJECT_PATH_FORMAT = (
@@ -192,7 +194,7 @@ class ChannelLauncher(object):
         raise NotImplementedError()
 
     def delete_search_provider(self):
-        os.remove(self.search_provider_file_path)
+        try_remove(self.search_provider_file_path)
 
     def write_channel_icon(self):
         raise NotImplementedError()
