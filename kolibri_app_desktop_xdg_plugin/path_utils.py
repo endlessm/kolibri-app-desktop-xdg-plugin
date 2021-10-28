@@ -2,8 +2,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import os
 import configparser
+import os
 
 from kolibri.core.content.utils.paths import get_content_dir_path
 
