@@ -205,7 +205,7 @@ class ChannelLauncher(object):
 
 
 class ChannelLauncher_FromDatabase(ChannelLauncher):
-    FORMAT_VERSION = 6
+    FORMAT_VERSION = 7
 
     def __init__(self, context, channelmetadata):
         super().__init__(context)
