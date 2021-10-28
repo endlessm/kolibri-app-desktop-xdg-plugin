@@ -3,6 +3,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
+import configparser
 
 from kolibri.core.content.utils.paths import get_content_dir_path
 
@@ -27,3 +28,20 @@ def try_remove(file_path):
         os.remove(file_path)
     except Exception:
         pass
+
+
+def get_kolibri_gnome_path():
+    flatpak_info = "/.flatpak-info"
+    if not os.path.exists(flatpak_info):
+        return None
+
+    config = configparser.ConfigParser()
+    config.read(flatpak_info)
+    app_path = config["Instance"]["app-path"]
+    app_commit = config["Instance"]["app-commit"]
+
+    # Remove the commit to make it work with flatpak updates updates
+    app_path = app_path.replace(app_commit, "active")
+    path = os.path.join(app_path, "bin", "kolibri-gnome")
+
+    return path

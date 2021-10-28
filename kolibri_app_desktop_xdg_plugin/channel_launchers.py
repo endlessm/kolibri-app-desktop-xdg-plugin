@@ -18,6 +18,7 @@ from PIL import ImageDraw
 
 from .path_utils import ensure_dir
 from .path_utils import get_content_share_dir_path
+from .path_utils import get_kolibri_gnome_path
 from .path_utils import try_remove
 from .pillow_utils import center_xy
 from .pillow_utils import crop_image_to_square
@@ -260,6 +261,10 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
 
         if icon_name:
             desktop_file_parser.set("Desktop Entry", "Icon", icon_name)
+
+        kolibri_gnome = get_kolibri_gnome_path()
+        if kolibri_gnome:
+            desktop_file_parser.set("Desktop Entry", "TryExec", kolibri_gnome)
 
         ensure_dir(self.desktop_file_path)
         with open(self.desktop_file_path, "w") as desktop_entry_file:
