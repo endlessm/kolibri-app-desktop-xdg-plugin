@@ -10,9 +10,10 @@ import re
 import shutil
 import subprocess
 
+from io import BytesIO
+
 from kolibri.core.content.models import ChannelMetadata
 from kolibri.dist.django.utils.functional import cached_property
-from kolibri.dist.django.utils.six import BytesIO
 from PIL import Image
 from PIL import ImageDraw
 
