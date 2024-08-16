@@ -29,6 +29,11 @@ from .pillow_utils import resize_preserving_aspect_ratio
 
 logger = logging.getLogger(__name__)
 
+try:
+    from kolibri_app.config import DISPATCH_URI_SCHEME
+except ImportError:
+    DISPATCH_URI_SCHEME = "x-kolibri-dispatch"
+
 DATA_URI_PATTERN = re.compile(
     "^(data:)(?P<mimetype>[\\w\\/\\+-]*)(;base64),(?P<data_b64>.*)"
 )
@@ -245,7 +250,8 @@ class ChannelLauncher_FromDatabase(ChannelLauncher):
         desktop_file_parser.set(
             "Desktop Entry",
             "Exec",
-            "gio open x-kolibri-dispatch://{channel_id}".format(
+            "gio open {dispatch_uri_scheme}://{channel_id}".format(
+                dispatch_uri_scheme=DISPATCH_URI_SCHEME,
                 channel_id=self.channel_id
             ),
         )
